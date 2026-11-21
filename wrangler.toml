@@ -26,11 +26,11 @@ RELEASE_ANCHOR_ID = "3c8ee1c4-79b8-4bfd-be18-430679f452f2"
 [[d1_databases]]
 binding = "DB"
 database_name = "planetary-max-db"
-database_id = "cb3feb4d-3cf4-4126-b495-ff4095fe3f97"
+database_id = "55a8734a-0fd5-44c8-82ef-ea70089ddaa6"
 
 [[kv_namespaces]]
 binding = "KV_BINDING"
-id = "9c1c8f836dca4d829de41e393e38fa0a"
+id = "a4b9a44ee9c04bc9bbce23bfaa3fd02c"
 
 [[ratelimits]]
 name = "ADMIN_LOGIN_LIMITER"
