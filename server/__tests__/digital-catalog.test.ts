@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
-import { readFileSync, readdirSync } from 'node:fs';
+import { migrateFixture } from './fixtures/migrate';
 import { sign } from 'hono/jwt';
 import app from '../planetary-max';
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
@@ -22,7 +22,7 @@ async function req(path: string, method = 'GET', body?: unknown, admin = true, b
   if (admin) headers.Cookie = `max_admin=${await sign({ role: 'admin', exp: Math.floor(Date.now()/1000)+60 }, secret, 'HS256')}`;
   return app.request(`https://max.test${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, bindings as never);
 }
-beforeEach(() => { db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON'); for (const name of readdirSync('migrations').filter(n => n.endsWith('.sql')).sort()) db.exec(readFileSync(`migrations/${name}`, 'utf8')); });
+beforeEach(() => { db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON'); migrateFixture(db); });
 afterEach(() => { db.close(); });
 describe('digital catalog', () => {
   it('stores bounded HTTPS video and screenshot previews for public published releases', async () => {
@@ -98,5 +98,86 @@ describe('BEEMAX authorization and provider boundary', () => {
     expect(r.status).toBe(429); expect(r.headers.get('Retry-After')).toBe('60'); expect(bindings.AI.run).not.toHaveBeenCalled();
     bindings.BEEMAX_LIMITER.limit.mockResolvedValue({ success: true }); bindings.AI.run.mockRejectedValue(new Error('Provider failure'));
     expect((await req('/api/admin/beemax/chat', 'POST', conversation, true, bindings)).status).toBe(503);
+  });
+});
+
+describe('MAX Architecture routing', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const studio = '/api/admin/max-routing';
+  const run = `${studio}/run`;
+  const call = (content: string, bindings: ReturnType<typeof env>) =>
+    req('/api/admin/beemax/chat', 'POST', { messages: [{ role: 'user', content }] }, true, bindings);
+
+  it('protects configuration and dispatch and reports missing targets without invoking a provider', async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const bindings = { ...env(), MAX_NEURAL_URL: 'http://neural.test' };
+    expect((await req(`${studio}/status`, 'GET', undefined, false, bindings)).status).toBe(401);
+    expect((await req(run, 'POST', { prompt: 'hello' }, false, bindings)).status).toBe(401);
+    expect((await req(run, 'POST', { prompt: 'hello' }, true, bindings, 'https://other.test')).status).toBe(403);
+    const status = await (await req(`${studio}/status`, 'GET', undefined, true, bindings)).json();
+    expect(status).toEqual({ targets: [
+      { target: 'max_llm', status: 'configured' },
+      { target: 'neural', status: 'unconfigured' },
+      { target: 'solver', status: 'unconfigured' },
+    ] });
+    const response = await req(run, 'POST', { prompt: 'Create an embedding' }, true, bindings);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ target: 'neural', status: 'unconfigured' });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(bindings.AI.run).not.toHaveBeenCalled();
+  });
+
+  it('dispatches each classification only to its configured service and preserves ordinary assistant chat', async () => {
+    const fetcher = vi.fn(async () => Response.json({ response: 'External result' }));
+    vi.stubGlobal('fetch', fetcher);
+    const bindings = { ...env(), MAX_LLM_MODEL: '@cf/test/model', MAX_NEURAL_URL: 'https://neural.test/run', MAX_NEURAL_TOKEN: 'synthetic-neural', MAX_SOLVER_URL: 'https://solver.test/run' };
+    for (const [prompt, target] of [['Write a story', 'max_llm'], ['Compute an embedding', 'neural'], ['Solve this equation', 'solver']]) {
+      const response = await req(run, 'POST', { prompt }, true, bindings);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ target, status: 'connected', message: expect.any(String) });
+    }
+    expect(bindings.AI.run).toHaveBeenCalledTimes(1);
+    expect(bindings.AI.run).toHaveBeenCalledWith('@cf/test/model', expect.objectContaining({ messages: [{ role: 'user', content: 'Write a story' }] }));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenNthCalledWith(1, new URL(bindings.MAX_NEURAL_URL), expect.objectContaining({ redirect: 'error', headers: expect.objectContaining({ Authorization: 'Bearer synthetic-neural' }), body: '{"prompt":"Compute an embedding"}' }));
+    expect(fetcher).toHaveBeenNthCalledWith(2, new URL(bindings.MAX_SOLVER_URL), expect.objectContaining({ body: '{"prompt":"Solve this equation"}' }));
+    expect((await call('Help me solve an equation', bindings)).status).toBe(200);
+    expect(bindings.AI.run).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not fall back or report success for unavailable, invalid, or throttled services', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ response: '   ' }));
+    vi.stubGlobal('fetch', fetcher);
+    const bindings = { ...env(), MAX_SOLVER_URL: 'https://solver.test/run' };
+    for (let i = 0; i < 2; i++) {
+      const response = await req(run, 'POST', { prompt: 'solver: x + 1' }, true, bindings);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ target: 'solver', status: 'unavailable' });
+    }
+    bindings.BEEMAX_LIMITER.limit.mockResolvedValue({ success: false });
+    const limited = await req(run, 'POST', { prompt: 'solver: x + 1' }, true, bindings);
+    expect(limited.status).toBe(429);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(bindings.AI.run).not.toHaveBeenCalled();
+  });
+
+  it('looks up only configured feeds for /research, including without a model binding', async () => {
+    const fetcher = vi.fn(async (url: string) => url.includes('offline')
+      ? new Response(null, { status: 503 })
+      : Response.json({ items: [{ title: 'Orbital telemetry', summary: 'Published today' }, { title: 'Unrelated news' }] }));
+    vi.stubGlobal('fetch', fetcher);
+    const bindings = { ...env(), AI: undefined, PUBLIC_FEEDS_JSON: JSON.stringify([{ url: 'https://feeds.test/live' }, { url: 'https://feeds.test/offline' }]) };
+    expect((await call('/research orbital', bindings as any)).status).toBe(200);
+    const data = await (await call('/research orbital', bindings as any)).json();
+    expect(data).toMatchObject({ provider: 'Configured feeds', message: expect.stringContaining('Orbital telemetry') });
+    expect(JSON.stringify(data)).toContain('1 configured feed(s) unavailable');
+    expect(JSON.stringify(data)).not.toContain('Unrelated news');
+    expect((await call('/research', { ...bindings, PUBLIC_FEEDS_JSON: '[]' } as any)).status).toBe(503);
+    const unavailable = await call('/research', { ...bindings, PUBLIC_FEEDS_JSON: '[{"url":"https://feeds.test/offline"}]' } as any);
+    expect(await unavailable.json()).toMatchObject({ error: 'Configured research feeds are unavailable.' });
   });
 });

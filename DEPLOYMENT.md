@@ -69,7 +69,13 @@ npm run db:migrate
 npm run deploy
 ```
 
-In Cloudflare Workers Builds, use `npm run build` as the build command and `npx wrangler deploy` as the deploy command. Wrangler serves `./dist`. The built `dist` directory is ignored in Git; generate it during each build. SPA paths use the application shell, while `/api/*` and `/v1/*` reach the Worker first and keep JSON errors.
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:1930b695259468a9cb4a256337ef5b0bd32b0c22eff22fdd3cd3e49c7e58d22a -->
+
+In Cloudflare Workers Builds, use `npm run build` as the build command and `npm run db:migrate && npx wrangler deploy --config ./wrangler.toml` as the deploy command, after verifying the database and backup as described below. Wrangler serves `./dist`. The built `dist` directory is ignored in Git; generate it during each build. SPA paths use the application shell, while `/api/*` and `/v1/*` reach the Worker first and keep JSON errors.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated:v1 -->
 
@@ -89,7 +95,13 @@ Migrations 0016 through 0021 are required.
 
 <!-- /coderabbit-ai-generated:v1 -->
 
-<!-- /coderabbit-ai-generated:v1 --> Migration 0016 adds a catalog flag and hides the exact unchanged historical demo artwork records; it preserves the rows. Migration 0017 links new settlement receipts to paying wallets for access-link recovery. Back up the production database before migration. No remote migration or deployment was performed during this task.
+<!-- /coderabbit-ai-generated:v1 --> <!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:509bf8ee44cd883a9af19fb0ef01f10e3d3f1c0c02a9ed4869e2ad99babd840d -->
+
+Schema preparation adds the catalog flag when missing, and migration 0016 hides the exact unchanged historical demo artwork records; it preserves the rows.
+
+<!-- /coderabbit-ai-generated:v1 --> Migration 0017 links new settlement receipts to paying wallets for access-link recovery. Back up the production database before migration. No remote migration or deployment was performed during this task.
 
 <!-- coderabbit-ai-generated:v1 -->
 
@@ -99,15 +111,49 @@ Migrations 0016 through 0021 are required.
 
 The existing app is extended in place; see [specification coverage](docs/ECOSYSTEM.md) for implemented capabilities and remaining infrastructure requirements. Do not reset production data or rewrite existing Durable Object migration tags for this update.
 
-In Cloudflare Builds, select the repository root and the branch containing this update. Use `npm run build` and `npx wrangler deploy --config ./wrangler.toml`. The nested `workers/beemax-core` configuration uses the same Worker name and must not be selected for the showroom.
+<!-- coderabbit-ai-generated:v1 -->
 
-Apply the new additive D1 migration after inspecting the target account:
+<!-- coderabbit-ai-generated-section:v1:60bf8e5e2a11662156c5732ad6da35d1cd726b4a8985a712d06726d22d47fdd6 -->
+
+In Cloudflare Builds, select the repository root and the branch containing this update. The nested `workers/beemax-core` configuration uses the same Worker name and must not be selected for the showroom.
+
+Before enabling migrations in the build pipeline, verify the account and the `planetary-max-db` database ID in the branch's root `wrangler.toml`, and back up that database. Deployment logs showing a different database ID indicate a different configuration or target; resolve that difference before applying any changes.
+
+Use the following deploy command after that review:
 
 ```bash
-npx wrangler d1 migrations apply planetary-max-db --remote --config ./wrangler.toml
+npm run db:migrate && npx wrangler deploy --config ./wrangler.toml
 ```
 
-Root configuration includes `AI` (Workers AI) and `BEEMAX_LIMITER`, in addition to the existing administrator-session binding. BEEMAX uses the owner's Workers AI account and requires no model key in browser code. Its live availability and usage limits must be checked in that account after deployment. It currently supports conversation only.
+`db:migrate` first checks the existing D1 schema and adds any missing artwork fulfillment fields, `is_demo`, transaction `buyer_wallet`, and the unique access-token index needed by migrations 0014–0017. It preserves existing column values and fails if required baseline tables or columns are missing. If migration 0016 is already recorded but `is_demo` is missing, it stops for investigation instead of recreating the flag. Some additive changes can remain if preparation fails; rerunning it is safe after resolving the error.
+
+The preparation step expects an existing database with the core tables and D1 migration ledger, as in the failed 0016 deployment. It is not a fresh-database bootstrap. The direct `wrangler d1 migrations apply` command does not run this check. Verify the branch and use the command above; do not retry the old direct migration command on a database missing these fields.
+
+<!-- /coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:74d2877fac8c88ac23987e227974aa2bf8f0b8a21bbb2f61524fca7997870ffa -->
+
+Root configuration includes `AI` (Workers AI) and `BEEMAX_LIMITER`. The operator console uses the same limiter for chat, research, and routing. The private HUD routes (`/#/hud` and `/#/portal-os1`) require an `ADMIN_PASSWORD` session verified by `AdminSessionDO`.
+
+### MAX Architecture service connections
+
+In Spaces, open **MAX Architecture Output**, follow the command center link, and sign in. **Routing studio** shows which targets have configuration. **Classify and run** reports the chosen target and the result of that request.
+
+| Target | Worker configuration |
+| --- | --- |
+| MAX LLM | `AI` binding. Optional `MAX_LLM_MODEL` overrides the default `@cf/meta/llama-3.3-70b-instruct-fp8-fast` for both the studio and chat. Use a Workers AI text model that accepts messages and returns a text response. |
+| Neural | `MAX_NEURAL_URL` and optional Worker secret `MAX_NEURAL_TOKEN`. |
+| Solver | `MAX_SOLVER_URL` and optional Worker secret `MAX_SOLVER_TOKEN`. |
+
+The neural and solver URLs must use HTTPS. The Worker sends `POST` with JSON `{"prompt":"…"}` and an Authorization bearer header if a token is set. Endpoints must return a successful HTTP response with JSON `{"response":"…"}` containing non-empty text. A configured target can still be unavailable when called. The Worker does not retry a failed target through a different service.
+
+The studio defaults to MAX LLM, selects Solver for math or optimization keywords, and selects Neural for embedding or neural keywords. Use `llm:`, `neural:`, or `solver:` to explicitly select the target. Ordinary BEEMAX conversations stay with the authenticated assistant. Enter `/research` to list items from configured feeds or `/research <phrase>` to filter their titles and summaries. Feed configuration uses `PUBLIC_FEEDS_JSON` (an array of objects with HTTPS `url`, optional `label` and `scope`) and the existing `PRIVATE_WWW_FEED_URL` / `PRIVATE_WWW_FEED_TOKEN` settings.
+
+After deployment to your Cloudflare account, open **Routing studio → Verify BEEMAX inference**. This sends a small prompt through the same authenticated chat endpoint and displays the provider response when inference succeeds. A dry run or a configuration status cannot verify inference or endpoint availability.
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 <!-- coderabbit-ai-generated:v1 -->
 

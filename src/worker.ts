@@ -1,7 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import app, { AdminSessionDO, BEEMAXSecureNodeRegistryDO, NodeRegistryDO } from '../server/planetary-max';
 
-interface Env {
+import { feedSources, readConfiguredFeeds, type FeedBindings } from '../server/configured-feeds';
+
+interface Env extends FeedBindings {
   ASSETS: Fetcher;
   DB: D1Database;
   KV_BINDING?: KVNamespace;
@@ -9,16 +11,12 @@ interface Env {
   BASE_CHAIN_ID?: string;
   BASE_USDC_ADDRESS?: string;
   OPERATOR_NAMESPACE?: string;
-  PRIVATE_WWW_FEED_URL?: string;
-  PRIVATE_WWW_FEED_TOKEN?: string;
-  PUBLIC_FEEDS_JSON?: string;
   RELEASE_ANCHOR_ID?: string;
 }
 
 const BASE_CHAIN_ID = 8453;
 const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const RELEASE_ID = '3c8ee1c4-79b8-4bfd-be18-430679f452f2';
-type Feed = { item_id?: string; id?: string; title: string; status?: string; summary: string; meta?: string; formula?: string; url?: string; source?: string; scope?: string };
 const fallback = {
   sports: [
     { item_id: 'sp_01', title: 'MAX-SPORTS Telemetry Room #01', status: 'live_telemetry', summary: 'Edge match room tracking pace, momentum index, and non-custodial market state.', meta: 'Room: SP-01 | Reinvest Tag: MAX-SPORTS' },
@@ -35,40 +33,6 @@ const fallback = {
 function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 }
-function validFeedUrl(value: string): boolean {
-  try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password; } catch { return false; }
-}
-function stripTags(value: string): string {
-  return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-function parseXml(xml: string, label: string, scope: string): Feed[] {
-  const items: Feed[] = [];
-  const blocks = /<(?:item|entry)\b[^>]*>([\s\S]*?)<\/(?:item|entry)>/gi;
-  let match: RegExpExecArray | null;
-  while (items.length < 15 && (match = blocks.exec(xml))) {
-    const block = match[1];
-    const title = block.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1];
-    const summary = block.match(/<(?:description|summary|content:encoded|content)\b[^>]*>([\s\S]*?)<\/(?:description|summary|content:encoded|content)>/i)?.[1];
-    const link = block.match(/<link\b[^>]*href=["']([^"']+)["'][^>]*\/?>/i)?.[1] || block.match(/<link\b[^>]*>([\s\S]*?)<\/link>/i)?.[1];
-    items.push({ id: `${label}_${items.length}`, title: stripTags(title || `Feed item ${items.length + 1}`), summary: stripTags(summary || '').slice(0, 240), source: label, scope, url: link ? stripTags(link) : undefined });
-  }
-  return items;
-}
-async function fetchFeed(url: string, label: string, scope: string, token?: string): Promise<Feed[]> {
-  if (!validFeedUrl(url)) return [];
-  const headers = new Headers({ Accept: 'application/json, application/rss+xml, application/atom+xml, text/xml' });
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  try {
-    const response = await fetch(url, { headers, signal: AbortSignal.timeout(8000), redirect: 'manual' });
-    if (!response.ok || response.status >= 300) return [];
-    const text = (await response.text()).slice(0, 1_000_000);
-    try {
-      const data = JSON.parse(text) as { items?: Array<{ id?: string; title?: string; summary?: string; description?: string; url?: string; link?: string }> };
-      if (Array.isArray(data.items)) return data.items.slice(0, 15).map((item, index) => ({ id: item.id || `${label}_${index}`, title: item.title || `Feed item ${index + 1}`, summary: (item.summary || item.description || '').slice(0, 240), source: label, scope, url: item.url || item.link }));
-    } catch { /* RSS/Atom follows. */ }
-    return parseXml(text, label, scope);
-  } catch { return []; }
-}
 async function internetFeeds(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const scope = (url.searchParams.get('scope') || 'ALL').trim().slice(0, 80);
@@ -76,15 +40,7 @@ async function internetFeeds(request: Request, env: Env): Promise<Response> {
   if (env.KV_BINDING) {
     try { const cached = await env.KV_BINDING.get(cacheKey, 'json'); if (cached) return json({ ok: true, cached: true, ...(cached as object) }); } catch { /* Cache is an optimization, not a dependency. */ }
   }
-  const sources: Array<{ url: string; label: string; scope: string; token?: string }> = [];
-  if (env.PRIVATE_WWW_FEED_URL && validFeedUrl(env.PRIVATE_WWW_FEED_URL)) sources.push({ url: env.PRIVATE_WWW_FEED_URL, label: 'private_www', scope: 'MAX-INSTITUTE', token: env.PRIVATE_WWW_FEED_TOKEN });
-  if (env.PUBLIC_FEEDS_JSON) {
-    try {
-      const entries = JSON.parse(env.PUBLIC_FEEDS_JSON) as Array<{ url?: string; label?: string; scope?: string }>;
-      if (Array.isArray(entries)) for (const entry of entries.slice(0, 20)) if (entry.url && validFeedUrl(entry.url)) sources.push({ url: entry.url, label: (entry.label || 'web_feed').slice(0, 80), scope: (entry.scope || 'MAX-INTERNET').slice(0, 80) });
-    } catch { /* Ignore malformed optional configuration. */ }
-  }
-  const remote = (await Promise.all(sources.map(source => fetchFeed(source.url, source.label, source.scope, source.token)))).flat();
+  const { items: remote } = await readConfiguredFeeds(feedSources(env));
   const items = remote.filter(item => scope === 'ALL' || (item.scope || '').toLowerCase() === scope.toLowerCase());
   const payload = { scope, count: items.length, items, wallet_required: false, updated_at: new Date().toISOString(), source: items.length ? 'configured_feeds' : 'local_seed_fallback', ...(!items.length ? fallback : {}) };
   if (env.KV_BINDING) { try { await env.KV_BINDING.put(cacheKey, JSON.stringify(payload), { expirationTtl: 180 }); } catch { /* Continue without cache. */ } }
