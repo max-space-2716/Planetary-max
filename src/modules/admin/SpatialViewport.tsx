@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { RoutingTarget } from '../../shared/max-routing';
 import LineageReceipt from './LineageReceipt';
+import ViewportVideoSearch from './ViewportVideoSearch';
+import { clearViewportVideoElement, safeVideoUrl } from './video-search';
 import { mountMaxArtBrowserPage, type MaxArtBrowserPageHandle } from './max-art-browser';
 import type { StrokeLayer } from './jurreauism-interactive';
 import type { LineageRun } from './lineage';
@@ -160,14 +162,18 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
       <p className="spatial-hint">Models left to right: linear, exponential, double exponential, tetration. Heights are logarithmic; purple markers exceed the safe integer limit.</p>
     </div>}
     {videoMode && <div className="spatial-stage" key={mode}>
+      <ViewportVideoSearch snapshot={snapshot} nodeId={nodeId}
+        endpoint={import.meta.env.VITE_VIDEO_SEARCH_ENDPOINT}
+        select={url => {
+          setError(''); setSource(url);
+          setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: true });
+        }}/>
       <form className="spatial-video-form" onSubmit={event => {
         event.preventDefault();
-        try {
-          const url = new URL(String(new FormData(event.currentTarget).get('source')).trim());
-          if (url.protocol !== 'https:' || url.username || url.password) throw new Error();
-          setError(''); setSource(url.href);
-          setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: true });
-        } catch { setError('Enter a direct HTTPS video URL without embedded credentials.'); }
+        const url = safeVideoUrl(String(new FormData(event.currentTarget).get('source')).trim());
+        if (!url) { setError('Enter a direct HTTPS video URL without embedded credentials.'); return; }
+        setError(''); setSource(url);
+        setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: true });
       }}>
         <label>Direct HTTPS video URL<input name="source" type="url" placeholder="https://example.com/preview.mp4" required maxLength={2048}/></label>
         <button type="submit">Set source</button>
@@ -203,9 +209,7 @@ function VideoPlayer({ source, reportError }: { source: string; reportError: (me
     if (!player) return;
     player.src = source;
     return () => {
-      player.pause();
-      player.removeAttribute('src');
-      player.load();
+      clearViewportVideoElement(player);
     };
   }, [source]);
   return <video ref={video} controls playsInline preload="none" aria-label="HTTPS video preview"

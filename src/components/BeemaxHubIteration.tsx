@@ -30,7 +30,7 @@ const TIER_OPTIONS: TierOption[] = [
     label: 'Base USDC Output Tier',
     priceUsdc: '1.000000',
     walletRequired: true,
-    summary: 'Opt-in Base Mainnet (8453) USDC settlement for verified output delivery.',
+    summary: 'Output tier preview. Payment and delivery are unavailable in this view.',
   },
 ];
 
@@ -79,7 +79,6 @@ const DOMAIN_OUTPUTS: Record<
 export const BeemaxHubIteration: React.FC = () => {
   const [selectedTier, setSelectedTier] = useState<TierOption>(TIER_OPTIONS[0]);
   const [activeDomain, setActiveDomain] = useState<OutputDomain>('video-hud');
-  const [optInWallet, setOptInWallet] = useState(false);
   const [statusNote, setStatusNote] = useState(
     '0.000000 USDC preview active • MAX Compute: 0.000000 • GET / zero-write',
   );
@@ -95,9 +94,7 @@ export const BeemaxHubIteration: React.FC = () => {
       return;
     }
     setStatusNote(
-      optInWallet
-        ? `Selected ${tier.label} (${tier.priceUsdc} USDC on Base 8453) • Ready for quote`
-        : 'Enable opt-in Base Mainnet (8453) wallet mode first to stage a paid USDC quote',
+      `Selected ${tier.label} (${tier.priceUsdc} USDC on Base 8453) • Payment and delivery unavailable in this view`,
     );
   };
 
@@ -113,21 +110,6 @@ export const BeemaxHubIteration: React.FC = () => {
             MAX Compute: <strong>0.000000</strong> • Base USDC (8453) • Outputs Only
           </p>
         </div>
-        <button
-          type="button"
-          aria-pressed={optInWallet}
-          onClick={() => {
-            const next = !optInWallet;
-            setOptInWallet(next);
-            setStatusNote(
-              next
-                ? 'Opt-in wallet mode enabled for Base Mainnet (8453) USDC'
-                : 'Wallet mode off • Free 0.000000 USDC browsing active',
-            );
-          }}
-        >
-          {optInWallet ? 'Wallet Opt-In: ON (Base 8453)' : 'Enable Opt-In Wallet (Base 8453)'}
-        </button>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
