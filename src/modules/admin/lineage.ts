@@ -1,6 +1,6 @@
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type LineageRun = {
-  kind: 'routing' | 'scenario' | 'publishing' | 'chat' | 'view' | 'web_lookup';
+  kind: 'routing' | 'scenario' | 'publishing' | 'chat' | 'view' | 'web_lookup' | 'video_search';
   nodeId: string;
   timestamp: string;
   intent: Json;
