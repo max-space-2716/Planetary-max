@@ -8,3 +8,7 @@
 .sports-feed-controls button{padding:.65rem .9rem;border:1px solid #426879;border-radius:6px;background:#18313b;color:#e1f2f4;cursor:pointer}
 .sports-feed-controls button:hover{background:#2c5360}
 .sports-feed-hub [role=status]{font-size:.8rem;color:#b0c2d2;overflow-wrap:anywhere}
+.sports-feed-tabs{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}
+.sports-feed-tabs button{padding:.5rem .8rem;border:1px solid #426879;border-radius:6px;background:#18313b;color:#e1f2f4;cursor:pointer}
+.sports-feed-tabs button[aria-pressed=true]{border-color:#8ae4da;background:#2c5360}
+.sports-feed-controls label{display:flex;flex:1 1 260px;align-items:center;gap:.6rem;flex-wrap:wrap}

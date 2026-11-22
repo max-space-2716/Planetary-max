@@ -54,8 +54,16 @@ export function mountSessionSportsIframe(params: {
   link.rel = 'noopener noreferrer';
   link.textContent = 'Open Stream Tab';
   link.style.cssText = 'color:#38bdf8;text-decoration:underline';
+  const dismiss = doc.createElement('button');
+  dismiss.type = 'button';
+  dismiss.textContent = '×';
+  dismiss.setAttribute('aria-label', 'Dismiss frame notice');
+  dismiss.title = 'Dismiss notice';
+  dismiss.style.cssText = 'padding:0 6px;border:0;border-radius:4px;background:rgba(255,255,255,0.12);color:#f8fafc;font-size:14px;cursor:pointer';
+  dismiss.addEventListener('click', () => fallback.remove());
   fallback.appendChild(label);
   fallback.appendChild(link);
+  fallback.appendChild(dismiss);
   wrapper.appendChild(iframe);
   wrapper.appendChild(fallback);
   params.container.appendChild(wrapper);

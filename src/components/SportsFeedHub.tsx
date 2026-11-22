@@ -1,25 +1,27 @@
 import { useEffect, useRef } from 'react';
-import { attachSportsUrlBar } from '../modules/admin/sports-url-bar';
+import { mountSportsHudWithChoices, type SportsSourceOption } from '../modules/admin/sports-hud-choices';
 import './sports-feed-hub.css';
 
-export default function SportsFeedHub() {
-  const root = useRef<HTMLElement>(null);
+const SPORTS_FEED_PRESETS: SportsSourceOption[] = [
+  // Add verified HTTPS feed or embed sources here.
+  // { id: 'feed-1', label: 'Feed 1 (Primary)', url: 'https://...' },
+  // { id: 'feed-2', label: 'Feed 2 (Alt Embed)', url: 'https://...' },
+];
+
+export default function SportsFeedHub({ presetSources = SPORTS_FEED_PRESETS }: { presetSources?: SportsSourceOption[] }) {
+  const controls = useRef<HTMLDivElement>(null);
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!root.current || !viewport.current) return;
-    const bar = attachSportsUrlBar({ rootEl: root.current, viewportEl: viewport.current });
-    return () => bar.destroy();
-  }, []);
+    if (!controls.current || !viewport.current) return;
+    // Cloudflare's DOM types conflict with React's HTMLElement type for ParentNode.prepend.
+    const hud = mountSportsHudWithChoices({ rootEl: controls.current as unknown as ParentNode, viewportEl: viewport.current, presetSources });
+    return () => hud.destroy();
+  }, [presetSources]);
 
-  return <section className="sports-feed-hub" ref={root} aria-label="MAX-SPORTS live feed">
+  return <section className="sports-feed-hub" aria-label="MAX-SPORTS live feed">
     <div className="sports-feed-heading"><span className="micro-label">MAX-SPORTS / LIVE FEED</span><h2>Watch the action<span>.</span></h2></div>
-    <div className="sports-feed-screen" ref={viewport}/>
-    <form className="sports-feed-controls" onSubmit={event => event.preventDefault()}>
-      <label htmlFor="max-sports-url-input">HTTPS sports URL</label>
-      <input id="max-sports-url-input" type="text" inputMode="url" maxLength={2048} placeholder="https://example.com/live"/>
-      <button id="max-sports-load-btn" type="button">Load feed</button>
-      <button id="max-sports-clear-btn" type="button">Clear</button>
-    </form>
-    <p id="max-sports-status" role="status">No live sports feed URL is attached yet.</p>
+    <div id="overview-sports-panel" ref={controls}>
+      <div id="overview-sports-viewport" className="sports-feed-screen" ref={viewport}/>
+    </div>
   </section>;
 }
