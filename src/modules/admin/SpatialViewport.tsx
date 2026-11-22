@@ -1,8 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RoutingTarget } from '../../shared/max-routing';
 import LineageReceipt from './LineageReceipt';
 import ViewportVideoSearch from './ViewportVideoSearch';
 import { clearViewportVideoElement, safeVideoUrl } from './video-search';
+import { createOverviewViewportController } from './overview-viewport-controller';
+import { sportsUrlKind } from './sports-url-bar';
 import { mountMaxArtBrowserPage, type MaxArtBrowserPageHandle } from './max-art-browser';
 import type { StrokeLayer } from './jurreauism-interactive';
 import type { LineageRun } from './lineage';
@@ -23,6 +25,7 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
   setViewport: (state: ViewportState) => void;
 }) {
   const [source, setSource] = useState('');
+  const [sourceKind, setSourceKind] = useState<'stream' | 'embed'>('stream');
   const [error, setError] = useState('');
   const [angle, setAngle] = useState(35);
   const [run, setRun] = useState<LineageRun>();
@@ -42,6 +45,7 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
   const mode = viewport?.mode ?? 'MAX-SIM';
   const rendering = viewport?.rendering ?? 'MAX-ART';
   const videoMode = mode === 'Live Video' || (mode === 'MAX Renderings' && rendering === 'MAX-SPORTS');
+  const sportsMode = mode === 'MAX Renderings' && rendering === 'MAX-SPORTS';
   const renderingItem = renderings[rendering];
   const artMode = mode === 'MAX Renderings' && rendering === 'MAX-ART';
   const artNodeTag = registry.selectedNodeId ?? 'unenrolled-local';
@@ -95,6 +99,7 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
   const changeView = (next: ViewportState['mode'], item: ViewportState['rendering'] = null) => {
     if (next === mode && item === viewport?.rendering) return;
     setSource('');
+    setSourceKind('stream');
     setError('');
     setViewport({ mode: next, rendering: item, sourceSet: false });
   };
@@ -113,11 +118,12 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
     <div className="spatial-frame">
       <div className={`spatial-screen${artMode ? ' spatial-screen-art' : ''}`} ref={screen}>
         {mode === 'MAX-SIM' && <SimulationCanvas scenario={scenario} box={box} angle={angle}/>}
-        {videoMode && source && <VideoPlayer key={source} source={source} reportError={setError}/>}
+        {sportsMode && <SportsFeed source={source} kind={sourceKind} reportError={setError}/>}
+        {videoMode && !sportsMode && source && <VideoPlayer key={source} source={source} reportError={setError}/>}
         {videoMode && !source && <div className="spatial-placeholder">
           <span aria-hidden="true">{mode === 'Live Video' ? '▷' : renderingItem.symbol}</span>
           <strong>{mode === 'Live Video' ? 'Awaiting a video source' : 'MAX-SPORTS · Live video'}</strong>
-          <small>No stream is configured.</small>
+          <small>{sportsMode ? 'No live sports feed URL is attached yet.' : 'No stream is configured.'}</small>
         </div>}
         {artMode && <>
           <canvas ref={artCanvas} role="img" aria-label={`Interactive MAX-ART Jurreauism Canvas: 13 concentric rings and a lattice, signed MaxJ. Node: ${artNodeTag}.`}/>
@@ -165,24 +171,35 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
       <ViewportVideoSearch snapshot={snapshot} nodeId={nodeId}
         endpoint={import.meta.env.VITE_VIDEO_SEARCH_ENDPOINT}
         select={url => {
-          setError(''); setSource(url);
+          setError(''); setSourceKind('stream'); setSource(url);
           setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: true });
         }}/>
       <form className="spatial-video-form" onSubmit={event => {
         event.preventDefault();
-        const url = safeVideoUrl(String(new FormData(event.currentTarget).get('source')).trim());
-        if (!url) { setError('Enter a direct HTTPS video URL without embedded credentials.'); return; }
-        setError(''); setSource(url);
+        const raw = String(new FormData(event.currentTarget).get('source')).trim();
+        if (sportsMode && !raw) {
+          setSource(''); setError(''); setSourceKind('stream');
+          setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: false });
+          return;
+        }
+        const url = safeVideoUrl(raw);
+        if (!url) {
+          if (sportsMode) { setSource(''); setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: false }); }
+          setError('Enter an HTTPS URL without embedded credentials.'); return;
+        }
+        setError(''); setSourceKind(sportsMode ? sportsUrlKind(url) : 'stream'); setSource(url);
         setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: true });
       }}>
-        <label>Direct HTTPS video URL<input name="source" type="url" placeholder="https://example.com/preview.mp4" required maxLength={2048}/></label>
-        <button type="submit">Set source</button>
-        {source && <button type="button" onClick={() => {
+        <label>{sportsMode ? 'HTTPS sports URL' : 'Direct HTTPS video URL'}<input id={sportsMode ? 'max-sports-url-input' : undefined} name="source" type="text" inputMode="url" placeholder="https://example.com/preview.mp4" required={!sportsMode} maxLength={2048}/></label>
+        <button id={sportsMode ? 'max-sports-load-btn' : undefined} type="submit">Set source</button>
+        {(source || sportsMode) && <button id={sportsMode ? 'max-sports-clear-btn' : undefined} type="button" onClick={event => {
+          if (sportsMode) event.currentTarget.form?.reset();
           setSource(''); setError('');
           setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: false });
-        }}>Unload video</button>}
+        }}>{sportsMode ? 'Clear feed' : 'Unload video'}</button>}
       </form>
-      <p className="spatial-hint">Press Play to start. Leaving this view unloads the player.</p>
+      {sportsMode && <p id="max-sports-status" role="status" className="spatial-hint">{source ? `Feed URL attached (${sourceKind === 'embed' ? 'iframe; host framing rules apply' : 'direct video'}).` : 'No live sports feed URL is attached yet.'}</p>}
+      <p className="spatial-hint">{sportsMode && sourceKind === 'embed' && source ? 'Playback depends on the embed provider.' : 'Press Play to start. Playback depends on browser format support.'} Leaving this view unloads the player.</p>
       {error && <p role="alert">{error}</p>}
     </div>}
     <div className="spatial-stage spatial-record">
@@ -190,7 +207,7 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
       <button type="button" onClick={() => setRun({
         kind: 'view', nodeId, timestamp: new Date().toISOString(),
         intent: { action: 'record-command-view', mode, rendering: viewport?.rendering ?? null },
-        ir: { renderer: mode === 'MAX-SIM' ? 'canvas-perspective' : artMode ? 'jurreauism-interactive-canvas-v1' : videoMode ? 'native-video' : 'static-preview',
+        ir: { renderer: mode === 'MAX-SIM' ? 'canvas-perspective' : artMode ? 'jurreauism-interactive-canvas-v1' : sportsMode && source && sourceKind === 'embed' ? 'iframe' : videoMode ? 'native-video' : 'static-preview',
           width_css_px: box.width, height_css_px: box.height, angle: mode === 'MAX-SIM' ? angle : null },
         result: { source_configured: Boolean(source), media_error: Boolean(error), registry, route: activeRoute,
           scenario: mode === 'MAX-SIM' ? scenario : null, ...(artMode ? { art: { seedLabel: 'DAT-JURREAUISM-v1', signature: 'MaxJ', layer: 'Layer 13', umbrella: 'OUR umbrella', nodeTag: artNodeTag, drawEnabled, symmetryCount, mirrorRadial, strokeColor, lineWidth,
@@ -200,6 +217,23 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
       <LineageReceipt run={run}/>
     </div>
   </section>;
+}
+
+function SportsFeed({ source, kind, reportError }: { source: string; kind: 'stream' | 'embed'; reportError: (message: string) => void }) {
+  const container = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!container.current) return;
+    const controller = createOverviewViewportController(container.current);
+    controller.activateSportsFeed(kind === 'embed' ? { embedUrl: source } : { streamUrl: source });
+    if (kind === 'stream' && source) {
+      const video = container.current.querySelector('video');
+      if (video) void video.play().catch(() => {});
+    }
+    return () => { controller.switchAwayTo('idle'); };
+  }, [source, kind]);
+  return <div className="spatial-sports-feed" ref={container} onErrorCapture={() => {
+    if (kind === 'stream') reportError('Video could not play. Check the URL and browser format support.');
+  }}/>;
 }
 
 function VideoPlayer({ source, reportError }: { source: string; reportError: (message: string) => void }) {

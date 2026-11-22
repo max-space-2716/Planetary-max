@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { CollectorVault } from './modules/art/CollectorCheckout';
 import BeemaxPortalCommandHud from './components/BeemaxPortalCommandHud';
-import { BeemaxHubIteration } from './components/BeemaxHubIteration';
+import SportsFeedHub from './components/SportsFeedHub';
 import MaxSportsUserHud from './modules/sports/MaxSportsUserHud';
 import PortalOS1Layout from './core/PortalOS1Layout';
 import AdminAccess, { useAdministrator } from './modules/admin/AdminAccess';
@@ -54,7 +54,7 @@ export default function App() {
 
   return (
     <PortalOS1Layout>
-      <BeemaxHubIteration />
+      <SportsFeedHub />
     </PortalOS1Layout>
   );
 }
