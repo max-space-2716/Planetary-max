@@ -1,0 +1,53 @@
+.spatial-viewport{--spatial-line:#34515d;--spatial-accent:#8ae4da;background:#101721;border:1px solid var(--spatial-line);border-radius:12px;overflow:hidden;margin:1rem 0 1.4rem}
+.spatial-viewport > header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px}
+.spatial-viewport h4{margin:2px 0 0;font-size:1.25rem;color:#ecf8fa}
+.spatial-viewport small{color:#a8c0cf;font-size:.73rem;letter-spacing:.07em}
+.spatial-switch{display:flex;flex-wrap:wrap;gap:6px}
+.spatial-viewport button,.lineage-receipt button,#substrate .scenario-record{background:#18313b;border:1px solid #426879;color:#e1f2f4;border-radius:6px;padding:.48rem .72rem;cursor:pointer;font:inherit;font-size:.82rem}
+.spatial-viewport button[aria-pressed=true]{border-color:var(--spatial-accent);color:#b5fff6;background:#244853}
+.spatial-viewport button:hover,.lineage-receipt button:hover{background:#2c5360}
+.spatial-frame{position:relative;background:radial-gradient(ellipse at 50% 60%,#172c38,#0c131d 74%);border-block:1px solid var(--spatial-line)}
+.spatial-stage{padding:14px 16px}
+.spatial-screen video{background:#080d15}
+.spatial-telemetry{display:flex;flex-wrap:wrap;gap:7px 16px;padding:12px 16px;border-top:1px solid var(--spatial-line);color:#c7dce5;background:#0c1722e6;font: .77rem/1.4 ui-monospace,monospace;overflow-wrap:anywhere}
+.spatial-telemetry strong{color:var(--spatial-accent)}
+.spatial-transport,.spatial-hint{color:#b0c2d2;font-size:.79rem}
+.spatial-viewport .spatial-transport{margin:0;padding:12px 16px}
+.spatial-video-form,.spatial-sim-meta{display:flex;align-items:end;gap:10px;flex-wrap:wrap}
+.spatial-video-form label{display:grid;gap:4px;flex:1 1 260px}
+.spatial-video-form input{width:100%;box-sizing:border-box;padding:.42rem;border:1px solid #426879;border-radius:6px;background:#0d1923;color:#e1f2f4}
+.spatial-sim-meta{align-items:center;justify-content:space-between;color:#deedf4}
+.spatial-sim-meta label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.spatial-placeholder{min-height:200px;display:grid;justify-items:center;align-content:center;gap:6px;text-align:center;color:#e1f2f4}
+.spatial-placeholder > span{font-size:3rem;color:var(--spatial-accent);line-height:1;text-shadow:0 0 24px #8ae4da66}
+.spatial-placeholder p{margin:0;color:#b0c2d2}
+.spatial-placeholder a{color:var(--spatial-accent)}
+.lineage-receipt{border:1px solid #3f546a;border-radius:8px;background:#111b29;color:#d8e7ef;padding:12px;margin:1rem 0;min-width:0}
+.lineage-receipt > header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.lineage-receipt p,.lineage-receipt ol{font-size:.82rem;line-height:1.55}
+.lineage-receipt ol{padding-inline-start:1.4rem}
+.lineage-receipt li + li{margin-top:.35rem}
+.lineage-receipt code{color:#a4eee6;overflow-wrap:anywhere}
+.lineage-receipt textarea{display:block;box-sizing:border-box;width:100%;background:#0e1521;color:#e6f1f5}
+.lineage-receipt details{margin-top:.65rem}
+.spatial-rendering-tabs{padding:0 16px 12px}
+.spatial-screen{position:relative;height:clamp(210px,32vw,350px);isolation:isolate}
+.spatial-screen > canvas,.spatial-screen > video,.spatial-screen > .spatial-placeholder{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain}
+.spatial-screen > .spatial-placeholder{display:grid}
+.spatial-markers{position:absolute;inset:0;pointer-events:none}
+.spatial-markers i{position:absolute;width:14px;height:14px;border:solid #8ae4da99;border-width:0}
+.spatial-markers i:nth-child(1){top:8px;left:8px;border-width:1px 0 0 1px}
+.spatial-markers i:nth-child(2){top:8px;right:8px;border-width:1px 1px 0 0}
+.spatial-markers i:nth-child(3){bottom:8px;left:8px;border-width:0 0 1px 1px}
+.spatial-markers i:nth-child(4){bottom:8px;right:8px;border-width:0 1px 1px 0}
+.spatial-record .spatial-transport{padding:0 0 .65rem}
+
+.spatial-art-link{color:var(--spatial-accent)}
+.spatial-art-error{position:absolute;inset:0;display:grid;place-items:center;color:#e1f2f4;background:#101721;padding:1rem;text-align:center}
+
+.spatial-screen-art{height:clamp(300px,32vw,350px)}
+.spatial-screen-art canvas{cursor:crosshair}
+.art-controls{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:center;color:#dcecf1}
+.art-controls label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.art-controls input[type=color]{width:38px;height:30px;padding:2px;border:1px solid #426879;background:#0d1923}
+.art-controls button:disabled{opacity:.5;cursor:not-allowed}

@@ -1,12 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import type { RegistryNode } from './BeeMaxControlDeck';
-export default function Ic_MeshVisualizer({nodes}:{nodes:RegistryNode[]}) {
+export default function Ic_MeshVisualizer({ nodes, selectedNodeId, onSelect }: { nodes: RegistryNode[]; selectedNodeId: string | null; onSelect: (id: string) => void }) {
   const meshNodes = nodes.map((n,i)=>({id:n.node_id,name:n.node_id,role:n.status,x:.5+Math.cos(i/Math.max(nodes.length,1)*Math.PI*2)*.3,y:.46+Math.sin(i/Math.max(nodes.length,1)*Math.PI*2)*.29,color:n.status==='ACTIVE'?'#c5a3ff':'#777777'}));
   const edges: number[][] = [];
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [selected, setSelected] = useState(0);
-  const selectedNode=meshNodes[Math.min(selected,meshNodes.length-1)];
+  const selected = meshNodes.findIndex(node => node.id === selectedNodeId);
+  const selectedNode = meshNodes[selected];
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
@@ -44,14 +44,14 @@ export default function Ic_MeshVisualizer({nodes}:{nodes:RegistryNode[]}) {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
     const index = meshNodes.findIndex(node => Math.hypot((node.x-x)*rect.width,(node.y-y)*rect.height) < 35);
-    if (index >= 0) setSelected(index);
+    if (index >= 0) onSelect(meshNodes[index].id);
   };
   return <div className="mesh-body">
     <div className="mesh-stage"><div className="mesh-corner top-left"/><div className="mesh-corner top-right"/><div className="mesh-corner bottom-left"/><div className="mesh-corner bottom-right"/>
       <div className="mesh-overlay"><span><i className="status-dot violet"/> NODE IDENTITY MAP</span><span>REGISTERED IDENTITIES</span></div>
       <canvas ref={canvas} onClick={choose} aria-label="Registered node map. Select a node using the buttons below." />
-      <div className="mesh-bottom"><span>✥ &nbsp; CONNECTIONS NOT REPORTED</span><span>{nodes.length ? Math.min(selected+1,nodes.length) : 0} / {nodes.length}</span></div>
+      <div className="mesh-bottom"><span>✥ &nbsp; CONNECTIONS NOT REPORTED</span><span>{nodes.length ? selected + 1 : 0} / {nodes.length}</span></div>
     </div>
-    <div className="mesh-footer"><div><span className="mini-label">SELECTED NODE</span><strong><span className="node-indicator" style={{background:selectedNode?.color || '#777777'}} />{selectedNode?.name || 'No nodes enrolled'}</strong><small>{selectedNode?.id || '—'} · {selectedNode?.role || 'Awaiting registry data'}</small></div><div className="node-picker" aria-label="Select mesh node">{meshNodes.map((node,i)=><button key={node.id} type="button" aria-label={node.name} aria-pressed={selected === i} onClick={()=>setSelected(i)} style={{'--node-color':node.color} as React.CSSProperties}/>)}</div></div>
+    <div className="mesh-footer"><div><span className="mini-label">SELECTED NODE</span><strong><span className="node-indicator" style={{background:selectedNode?.color || '#777777'}} />{selectedNode?.name || 'No nodes enrolled'}</strong><small>{selectedNode?.id || '—'} · {selectedNode?.role || 'Awaiting registry data'}</small></div><div className="node-picker" aria-label="Select mesh node">{meshNodes.map((node,i)=><button key={node.id} type="button" aria-label={node.name} aria-pressed={selected === i} onClick={()=>onSelect(node.id)} style={{'--node-color':node.color} as React.CSSProperties}/>)}</div></div>
   </div>;
 }
