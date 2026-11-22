@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { routingTargets, type RoutingTarget, type TargetStatus } from '../../shared/max-routing';
 
+import LineageReceipt from './LineageReceipt';
+import type { LineageRun } from './lineage';
+import type { RoutingState } from './workspace-state';
+
 type Result = { target?: RoutingTarget; status?: TargetStatus; message?: string; error?: string; provider?: string };
 const labels: Record<TargetStatus, string> = {
   configured: 'Configured · awaiting a request',
@@ -10,51 +14,63 @@ const labels: Record<TargetStatus, string> = {
   rate_limited: 'Rate limited',
 };
 
-export default function MaxRoutingStudio() {
-  const [targets, setTargets] = useState<Partial<Record<RoutingTarget, TargetStatus>>>({});
-  const [statusError, setStatusError] = useState('');
+export default function MaxRoutingStudio({ targets, setTargets, statusError, nodeId, setActiveRoute }: {
+  targets: RoutingState;
+  setTargets: React.Dispatch<React.SetStateAction<RoutingState>>;
+  statusError: string;
+  nodeId: string;
+  setActiveRoute: (target: RoutingTarget | null) => void;
+}) {
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>();
+  const [lineage, setLineage] = useState<LineageRun>();
   const [probe, setProbe] = useState(false);
   const request = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      try {
-        const response = await fetch('/api/admin/max-routing/status', { signal: controller.signal });
-        if (!response.ok) throw new Error();
-        const data = await response.json() as { targets: Array<{ target: RoutingTarget; status: TargetStatus }> };
-        setTargets(previous => ({ ...Object.fromEntries(data.targets.map(({ target, status }) => [target, status])), ...previous }));
-      } catch {
-        if (!controller.signal.aborted) setStatusError('Could not load target configuration.');
-      }
-    })();
-    return () => { controller.abort(); request.current?.abort(); };
-  }, []);
+  useEffect(() => () => request.current?.abort(), []);
 
   async function run(verify: boolean) {
     if (busy || (!verify && !prompt.trim())) return;
-    setBusy(true); setResult(undefined); setProbe(verify);
+    const submitted = verify ? 'Reply with a short greeting to verify BEEMAX inference.' : prompt.trim();
+    const prefix = submitted.match(/^(llm|neural|solver)\s*:/i)?.[1].toLowerCase();
+    const requestedTarget = prefix === 'llm' ? 'max_llm' : prefix === 'neural' || prefix === 'solver' ? prefix : null;
+    const endpoint = verify ? '/api/admin/beemax/chat' : '/api/admin/max-routing/run';
+    const timestamp = new Date().toISOString();
+    if (!verify) setActiveRoute(requestedTarget);
+    setBusy(true); setResult(undefined); setLineage(undefined); setProbe(verify);
+    const record = (data: Result, httpStatus: number | null) => setLineage({
+      kind: 'routing', nodeId, timestamp,
+      intent: { action: verify ? 'verify-beemax' : 'classify-and-run', prompt: submitted },
+      ir: { kind: 'client routing envelope', endpoint, requested_target: requestedTarget, reported_target: data.target ?? null },
+      result: { http_status: httpStatus, status: data.status ?? null, message: data.message ?? null, error: data.error ?? null, provider: data.provider ?? null },
+    });
     const controller = new AbortController();
     request.current = controller;
     try {
-      const response = await fetch(verify ? '/api/admin/beemax/chat' : '/api/admin/max-routing/run', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(verify
-          ? { messages: [{ role: 'user', content: 'Reply with a short greeting to verify BEEMAX inference.' }] }
-          : { prompt: prompt.trim() }),
+          ? { messages: [{ role: 'user', content: submitted }] }
+          : { prompt: submitted }),
       });
       const data = await response.json() as Result;
+      if (controller.signal.aborted) return;
+      if (!verify && data.target && Object.hasOwn(routingTargets, data.target)) setActiveRoute(data.target);
       if (data.target && data.status) {
         const { target, status } = data;
         setTargets(previous => ({ ...previous, [target]: status }));
       }
-      setResult(response.ok ? data : { ...data, error: data.error || 'Request failed.' });
+      const outcome = response.ok ? data : { ...data, error: data.error || 'Request failed.' };
+      setResult(outcome);
+      record(outcome, response.status);
     } catch {
-      if (!controller.signal.aborted) setResult({ error: 'Could not reach the Worker.' });
+      if (!controller.signal.aborted) {
+        const outcome = { error: 'Could not read a response from the Worker.' };
+        setResult(outcome);
+        record(outcome, null);
+      }
     } finally {
       setBusy(false);
     }
@@ -83,6 +99,7 @@ export default function MaxRoutingStudio() {
           <p style={{ whiteSpace: 'pre-wrap' }}>{result.message}</p>
         </>}
       </div>
+      <LineageReceipt run={lineage}/>
     </div>
   </section>;
 }
