@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
-import { readFileSync, readdirSync } from 'node:fs';
+import { migrateFixture } from './fixtures/migrate';
+import { readFileSync } from 'node:fs';
 import { sign } from 'hono/jwt';
 import app from '../planetary-max';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -35,7 +36,7 @@ async function request(path: string, method = 'GET', body?: unknown, role?: stri
 }
 beforeEach(() => {
   sqlite = new DatabaseSync(':memory:'); sqlite.exec('PRAGMA foreign_keys = ON');
-  for (const name of readdirSync('migrations').filter(n=>n.endsWith('.sql')).sort()) sqlite.exec(readFileSync(`migrations/${name}`, 'utf8'));
+  migrateFixture(sqlite);
 });
 afterEach(() => { sqlite.close(); vi.restoreAllMocks(); });
 
@@ -75,7 +76,7 @@ describe('release application boundaries', () => {
   it('preserves edited seed works and existing reservations during catalog migration', () => {
     const db=new DatabaseSync(':memory:');
     try {
-      for(const name of readdirSync('migrations').filter(n=>n.endsWith('.sql')&&n<'0016').sort())db.exec(readFileSync(`migrations/${name}`,'utf8'));
+      migrateFixture(db, '0016');
       db.exec("UPDATE artworks SET price_cents=12345 WHERE id='art_001'; INSERT INTO marketplace_orders (id,artwork_id,buyer_id,amount_cents) VALUES ('existing-order','art_002','artist_2',2400)");
       db.exec(readFileSync('migrations/0016_catalog_release.sql','utf8'));
       expect(db.prepare("SELECT is_demo FROM artworks WHERE id='art_001'").get()?.is_demo).toBe(0);

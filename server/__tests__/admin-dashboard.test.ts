@@ -66,6 +66,18 @@ describe('Dashboard administrator password', () => {
     expect(logout.status).toBe(200); expect(logout.headers.get('set-cookie')).toMatch(/Max-Age=0/i);
     expect((await session(env, cookie)).status).toBe(401);
   });
+  it('requires a verified Durable Object session for private HUD access', async () => {
+    const { env } = dashboardEnv();
+    const protectedCheck = (bindings: any, cookie = '') => app.request(
+      'https://max.test/api/admin/session?mode=durable&portal_auth=1', { headers: { Cookie: cookie } }, bindings,
+    );
+    expect((await protectedCheck(env)).status).toBe(401);
+    const cookie = await loggedInCookie(env);
+    expect((await protectedCheck(env, cookie)).status).toBe(200);
+    expect((await protectedCheck({ ...env, ADMIN_SESSIONS: undefined }, cookie)).status).toBe(503);
+    const legacy = await sign({ role: 'admin', exp: Math.floor(Date.now() / 1000) + 3600 }, jwtSecret, 'HS256');
+    expect((await protectedCheck({ JWT_SECRET: jwtSecret }, `max_admin=${legacy}`)).status).toBe(403);
+  });
   it('expires sessions and invalidates them when the Dashboard password changes', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     const { env } = dashboardEnv();

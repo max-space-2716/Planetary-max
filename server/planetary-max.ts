@@ -1,3 +1,4 @@
+import { registerMaxRouting } from './max-routing';
 import { Hono } from 'hono';
 import { verifyBaseTransfer } from './base-settlement';
 import { registerPaymentReviews } from './payment-reviews';
@@ -380,7 +381,12 @@ app.post('/api/admin/login', async (c) => {
   } catch { return c.json({ error: 'Login process failed' }, 400); }
 });
 app.use('/api/admin/*', requireAdmin);
-app.get('/api/admin/session', (c) => c.json({ authenticated: true }));
+app.get('/api/admin/session', (c) => {
+  if (c.req.query('mode') === 'durable' && !dashboardPassword(c.env)) {
+    return c.json({ error: 'This view requires a Durable Object operator session.' }, 403);
+  }
+  return c.json({ authenticated: true });
+});
 app.post('/api/admin/logout', async (c) => {
   if (dashboardPassword(c.env)) {
     const token = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') || getCookie(c, 'max_admin');
@@ -454,6 +460,7 @@ app.get('/api/admin/ledger', async (c) => {
 });
 
 registerEcosystem(app, requireAdmin);
+registerMaxRouting(app, requireAdmin);
 registerDigitalCheckout(app);
 registerPaymentReviews(app, requireAdmin);
 

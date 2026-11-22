@@ -162,6 +162,12 @@ export const BeemaxHubIteration: React.FC = () => {
       <div style={{ marginTop: 14, padding: 12, border: '1px solid #475569', borderRadius: 8 }}>
         <strong>{currentOutput.title}</strong> — <span>{currentOutput.badge}</span>
         <p style={{ margin: '6px 0 0' }}>{currentOutput.outputSummary}</p>
+        {activeDomain === 'max-architecture' && (
+          <>
+            <p>Operator sessions can access BEEMAX chat, configured research feeds, and the MAX LLM, neural, and solver connections.</p>
+            <a href="/#/admin">Open the operator command center ↗</a>
+          </>
+        )}
         {currentOutput.hasVideoHud && (
           <div style={{ marginTop: 10 }}>
             <video
