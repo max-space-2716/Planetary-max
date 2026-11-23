@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { SportsFeedOption } from './sports-feed-options';
+import { publishSportsPresetFromCommand, type SportsFeedOption } from './sports-feed-options';
+import { safeVideoUrl } from './video-search';
 import { loadSharedSportsPresets, saveSharedSportsPresets } from './sports-presets-api';
 
 export default function SportsFeedPresets() {
   const [options, setOptions] = useState<SportsFeedOption[]>([]);
   const [notice, setNotice] = useState('');
+  const [localNotice, setLocalNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,5 +48,22 @@ export default function SportsFeedPresets() {
       </div>
     </>}
     {notice && <p role="status" className="spatial-hint">{notice}</p>}
+    <form aria-label="Save a sports feed to this browser" onSubmit={event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const fields = new FormData(form);
+      const url = String(fields.get('url') ?? '').trim();
+      if (!safeVideoUrl(url)) { setLocalNotice('Enter an HTTPS feed URL without embedded credentials.'); return; }
+      const result = publishSportsPresetFromCommand(String(fields.get('label') ?? ''), url);
+      setLocalNotice(result.ok ? 'Feed saved to this browser.' : 'Could not save the feed. Browser storage may be unavailable.');
+      if (result.ok) form.reset();
+    }}>
+      <div className="sports-preset-row">
+        <label>Local feed label<input name="label" maxLength={200}/></label>
+        <label>Local feed URL<input name="url" inputMode="url" maxLength={2048} required/></label>
+        <button type="submit">Save to this browser</button>
+      </div>
+      {localNotice && <p role="status" className="spatial-hint">{localNotice}</p>}
+    </form>
   </section>;
 }
