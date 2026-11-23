@@ -2,16 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { createOverviewViewportController } from '../overview-viewport-controller';
 import { mountSessionSportsIframe } from '../session-sports-iframe';
 import { attachSportsUrlBar, sportsUrlKind } from '../sports-url-bar';
+import { mountSportsHudWithChoices } from '../sports-hud-choices';
 
 class ElementFixture {
   children: ElementFixture[] = [];
+  parent: ElementFixture | null = null;
+  dataset: Record<string, string> = {};
+  listeners = new Map<string, (event: any) => void>();
   style = { cssText: '' };
   attributes: Record<string, string> = {};
-  src = ''; title = ''; href = ''; textContent = ''; target = ''; rel = '';
+  src = ''; title = ''; href = ''; textContent = ''; target = ''; rel = ''; value = '';
   pause = vi.fn(); load = vi.fn(); play = vi.fn().mockResolvedValue(undefined);
   ownerDocument = { createElement: (tag: string) => new ElementFixture(tag) };
   constructor(public tag: string) {}
-  appendChild(child: ElementFixture) { this.children.push(child); return child; }
+  appendChild(child: ElementFixture) { child.parent = this; this.children.push(child); return child; }
+  prepend(child: ElementFixture) { child.parent = this; this.children.unshift(child); }
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); }
+  addEventListener(name: string, handler: (event: any) => void) { this.listeners.set(name, handler); }
+  fire(name: string, event: any = {}) { this.listeners.get(name)?.(event); }
   append(...children: ElementFixture[]) { this.children.push(...children); }
   replaceChildren() { this.children = []; }
   setAttribute(name: string, value: string) { this.attributes[name] = value; }
@@ -108,5 +116,60 @@ describe('overview sports viewport', () => {
     expect(status.textContent).toContain('valid https://');
     bar.destroy();
     expect(load.listeners.size + clear.listeners.size + input.listeners.size).toBe(0);
+  });
+
+  it('selects presets, handles custom URLs and dismisses the frame notice without unloading the feed', () => {
+    const root = new ElementFixture('div');
+    const viewport = new ElementFixture('div');
+    const hud = mountSportsHudWithChoices({
+      rootEl: root as unknown as ParentNode,
+      viewportEl: asContainer(viewport),
+      presetSources: [
+        { id: 'first', label: 'First feed', url: 'https://example.test/embed' },
+        { id: 'second', label: 'Second feed', url: 'https://example.test/live.mp4?x=1' },
+      ],
+    });
+    const tabs = root.querySelectorAll('button');
+    const input = root.querySelectorAll('input')[0];
+    tabs[0].fire('click');
+    const frame = viewport.querySelectorAll('iframe')[0];
+    expect(frame).toMatchObject({ src: 'https://example.test/embed', title: 'First feed' });
+    expect(tabs[0].attributes['aria-pressed']).toBe('true');
+    expect(tabs[1].attributes['aria-pressed']).toBe('false');
+    viewport.querySelectorAll('button')[0].fire('click');
+    expect(viewport.querySelectorAll('iframe')).toHaveLength(1);
+    expect(viewport.querySelectorAll('a')).toHaveLength(0);
+    tabs[1].fire('click');
+    expect(frame.removeAttribute).toHaveBeenCalledWith('src');
+    const video = viewport.querySelectorAll('video')[0];
+    expect(video.src).toBe('https://example.test/live.mp4?x=1');
+    expect(video.play).toHaveBeenCalledOnce();
+    expect(tabs[1].attributes['aria-pressed']).toBe('true');
+    hud.setPresetSources([{ id: 'second', label: 'Updated', url: 'https://example.test/live.mp4?x=1' }]);
+    expect(viewport.querySelectorAll('video')[0]).toBe(video);
+    expect(video.pause).not.toHaveBeenCalled();
+    expect(root.querySelectorAll('button')[0].attributes['aria-pressed']).toBe('true');
+    input.value = 'http://example.test/bad';
+    root.querySelectorAll('button')[1].fire('click');
+    expect(video.pause).toHaveBeenCalledOnce();
+    expect(viewport.children).toHaveLength(0);
+    expect(root.querySelectorAll('button')[0].attributes['aria-pressed']).toBe('false');
+    input.value = 'https://example.test/custom';
+    const preventDefault = vi.fn();
+    input.fire('keydown', { key: 'Enter', preventDefault });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(viewport.querySelectorAll('iframe')).toHaveLength(1);
+    expect(root.querySelectorAll('button')[0].attributes['aria-pressed']).toBe('false');
+    hud.clearAll();
+    expect(input.value).toBe('');
+    expect(viewport.children).toHaveLength(0);
+    hud.mountUrl('https://example.test/other.webm');
+    const lastVideo = viewport.querySelectorAll('video')[0];
+    hud.destroy();
+    expect(lastVideo.pause).toHaveBeenCalledOnce();
+    expect(viewport.children).toHaveLength(0);
+    expect(root.children).toHaveLength(0);
+    hud.mountUrl('https://example.test/after-destroy.mp4');
+    expect(viewport.children).toHaveLength(0);
   });
 });
