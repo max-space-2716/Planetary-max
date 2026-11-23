@@ -59,3 +59,33 @@ export function loadSportsFeedOptions(): SportsFeedOption[] {
 export function sportsFeedOptionsFromEvent(event: Event): SportsFeedOption[] {
   return sanitizeSportsFeedOptions((event as CustomEvent<unknown>).detail);
 }
+
+export type SportsPresetItem = SportsFeedOption;
+export const SPORTS_PRESETS_KEY = 'max_space_sports_presets_v1';
+
+export function readSportsPresets(): SportsPresetItem[] {
+  try {
+    const raw = localStorage.getItem(SPORTS_PRESETS_KEY);
+    return raw ? sanitizeSportsFeedOptions(JSON.parse(raw)) : [];
+  } catch { return []; }
+}
+
+export function publishSportsPresetFromCommand(
+  rawLabel: string, rawUrl: string,
+): { ok: boolean; presets: SportsPresetItem[]; status: 'unwired_honest' | 'published_local' } {
+  const existing = readSportsPresets();
+  const url = safeVideoUrl(rawUrl.trim());
+  if (!url) return { ok: false, presets: existing, status: 'unwired_honest' };
+
+  const baseId = `feed-${Date.now()}`;
+  let id = baseId;
+  for (let suffix = 2; existing.some(item => item.id === id); suffix++) id = `${baseId}-${suffix}`;
+  const presets = [...existing, { id, label: rawLabel.trim() || `Feed ${existing.length + 1}`, url }];
+  try {
+    localStorage.setItem(SPORTS_PRESETS_KEY, JSON.stringify(presets));
+  } catch { return { ok: false, presets: existing, status: 'unwired_honest' }; }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(Object.assign(new CustomEvent(SPORTS_FEED_OPTIONS_UPDATED, { detail: presets }), { localSportsPresets: true }));
+  }
+  return { ok: true, presets, status: 'published_local' };
+}

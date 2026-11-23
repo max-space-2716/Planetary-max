@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadSportsFeedOptions, saveSportsFeedOptions, saveSportsFeedOptionsFromCommand, SPORTS_FEED_OPTIONS_UPDATED, SPORTS_FEED_STORAGE_KEY, sportsFeedOptionsFromEvent } from '../sports-feed-options';
+import { publishSportsPresetFromCommand, readSportsPresets, loadSportsFeedOptions, saveSportsFeedOptions, saveSportsFeedOptionsFromCommand, SPORTS_FEED_OPTIONS_UPDATED, SPORTS_FEED_STORAGE_KEY, sportsFeedOptionsFromEvent } from '../sports-feed-options';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -43,4 +43,28 @@ describe('browser sports feed options', () => {
     expect(dispatchEvent.mock.calls[0][0].detail).toEqual(result.options);
     expect(loadSportsFeedOptions()).toEqual([]);
   });
+});
+
+it('appends local presets without touching the older browser choices or emitting on failure', () => {
+  const values = new Map([[SPORTS_FEED_STORAGE_KEY, 'older choices']]);
+  const write = vi.fn((key: string, value: string) => values.set(key, value));
+  const dispatchEvent = vi.fn();
+  vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) ?? null, setItem: write });
+  vi.stubGlobal('window', { dispatchEvent });
+  const now = vi.spyOn(Date, 'now').mockReturnValue(123);
+  try {
+    expect(publishSportsPresetFromCommand(' ', ' https://example.test ')).toMatchObject({ ok: true, status: 'published_local' });
+    const second = publishSportsPresetFromCommand(' Replay ', 'https://example.test/replay');
+    expect(second.presets).toEqual([
+      { id: 'feed-123', label: 'Feed 1', url: 'https://example.test/' },
+      { id: 'feed-123-2', label: 'Replay', url: 'https://example.test/replay' },
+    ]);
+    expect(readSportsPresets()).toEqual(second.presets);
+    expect(values.get(SPORTS_FEED_STORAGE_KEY)).toBe('older choices');
+    expect(dispatchEvent.mock.lastCall?.[0]).toMatchObject({ type: SPORTS_FEED_OPTIONS_UPDATED, detail: second.presets, localSportsPresets: true });
+    expect(publishSportsPresetFromCommand('Bad', 'https://user:pass@example.test')).toMatchObject({ ok: false, status: 'unwired_honest' });
+    write.mockImplementationOnce(() => { throw new Error('quota'); });
+    expect(publishSportsPresetFromCommand('Failed', 'https://example.test/other')).toEqual({ ok: false, presets: second.presets, status: 'unwired_honest' });
+    expect(dispatchEvent).toHaveBeenCalledTimes(2);
+  } finally { now.mockRestore(); }
 });

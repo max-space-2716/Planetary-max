@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { mountSportsHudWithChoices, type SportsSourceOption } from '../modules/admin/sports-hud-choices';
-import { loadSportsFeedOptions, SPORTS_FEED_OPTIONS_UPDATED, SPORTS_FEED_STORAGE_KEY, sportsFeedOptionsFromEvent } from '../modules/admin/sports-feed-options';
+import { loadSportsFeedOptions, readSportsPresets, SPORTS_PRESETS_KEY, SPORTS_FEED_OPTIONS_UPDATED, SPORTS_FEED_STORAGE_KEY, sportsFeedOptionsFromEvent } from '../modules/admin/sports-feed-options';
 import { loadSharedSportsPresetsWithFallback, SHARED_SPORTS_PRESETS_UPDATED } from '../modules/admin/sports-presets-api';
 import './sports-feed-hub.css';
 
@@ -15,6 +15,7 @@ export default function SportsFeedHub({ presetSources = SPORTS_FEED_PRESETS }: {
   const viewport = useRef<HTMLDivElement>(null);
   const hud = useRef<ReturnType<typeof mountSportsHudWithChoices> | null>(null);
   const [savedSources, setSavedSources] = useState(loadSportsFeedOptions);
+  const [localPresets, setLocalPresets] = useState(readSportsPresets);
   const [sharedSources, setSharedSources] = useState<SportsSourceOption[]>([]);
   const [sharedStatus, setSharedStatus] = useState<'network' | 'cache' | 'unavailable'>('network');
   useEffect(() => {
@@ -27,14 +28,19 @@ export default function SportsFeedHub({ presetSources = SPORTS_FEED_PRESETS }: {
   useEffect(() => {
     const merged = new Map(presetSources.map(source => [source.id, source]));
     for (const source of savedSources) merged.set(source.id, source);
+    for (const source of localPresets) merged.set(source.id, source);
     for (const source of sharedSources) merged.set(source.id, source);
     hud.current?.setPresetSources(Array.from(merged.values()));
-  }, [presetSources, savedSources, sharedSources]);
+  }, [presetSources, savedSources, localPresets, sharedSources]);
   useEffect(() => {
     const update = (event: Event) => {
-      if (!(event as Event & { sharedSportsPresets?: boolean }).sharedSportsPresets) setSavedSources(sportsFeedOptionsFromEvent(event));
+      const updateEvent = event as Event & { sharedSportsPresets?: boolean; localSportsPresets?: boolean };
+      if (updateEvent.sharedSportsPresets) return;
+      if (updateEvent.localSportsPresets) setLocalPresets(sportsFeedOptionsFromEvent(event));
+      else setSavedSources(sportsFeedOptionsFromEvent(event));
     };
     const onStorage = (event: StorageEvent) => {
+      if (event.key === SPORTS_PRESETS_KEY || event.key === null) setLocalPresets(readSportsPresets());
       if (event.key === SPORTS_FEED_STORAGE_KEY || event.key === null) setSavedSources(loadSportsFeedOptions());
     };
     window.addEventListener(SPORTS_FEED_OPTIONS_UPDATED, update);
