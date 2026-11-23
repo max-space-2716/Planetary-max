@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RoutingTarget } from '../../shared/max-routing';
 import LineageReceipt from './LineageReceipt';
 import ViewportVideoSearch from './ViewportVideoSearch';
+import SportsFeedPresets from './SportsFeedPresets';
 import { clearViewportVideoElement, safeVideoUrl } from './video-search';
 import { createOverviewViewportController } from './overview-viewport-controller';
 import { sportsUrlKind } from './sports-url-bar';
@@ -198,9 +199,10 @@ export default function SpatialViewport({ snapshot, activeRoute, nodeId, setView
           setViewport({ mode, rendering: viewport?.rendering ?? null, sourceSet: false });
         }}>{sportsMode ? 'Clear feed' : 'Unload video'}</button>}
       </form>
-      {sportsMode && <p id="max-sports-status" role="status" className="spatial-hint">{source ? `Feed URL attached (${sourceKind === 'embed' ? 'iframe; host framing rules apply' : 'direct video'}).` : 'No live sports feed URL is attached yet.'}</p>}
+      {sportsMode && <p id="max-sports-status" role="status" className="spatial-hint">{source ? `Feed URL attached (${sourceKind === 'embed' ? 'iframe; host framing rules apply' : 'direct video'}).` : 'unwired_honest: No live sports feed URL is attached yet.'}</p>}
       <p className="spatial-hint">{sportsMode && sourceKind === 'embed' && source ? 'Playback depends on the embed provider.' : 'Press Play to start. Playback depends on browser format support.'} Leaving this view unloads the player.</p>
       {error && <p role="alert">{error}</p>}
+      {sportsMode && <SportsFeedPresets/>}
     </div>}
     <div className="spatial-stage spatial-record">
       <p className="spatial-transport">{snapshot.transport}</p>

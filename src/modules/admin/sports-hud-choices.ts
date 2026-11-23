@@ -41,18 +41,20 @@ export function mountSportsHudWithChoices(options: SportsHudOptions) {
   clear.textContent = 'Clear';
   const status = doc.createElement('p');
   status.setAttribute('role', 'status');
-  status.textContent = 'No live sports feed URL is attached yet. Select a source or enter an HTTPS URL.';
+  status.textContent = 'unwired_honest: No live sports feed URL is attached yet. Select a source or enter an HTTPS URL.';
   inputRow.appendChild(label);
   inputRow.appendChild(load);
   inputRow.appendChild(clear);
-  if (options.presetSources?.length) controls.appendChild(tabs);
+  tabs.hidden = true;
+  controls.appendChild(tabs);
   controls.appendChild(inputRow);
   controls.appendChild(status);
   options.rootEl.prepend(controls);
 
   let activeSourceId: string | null = null;
+  let activeSourceUrl: string | null = null;
   let destroyed = false;
-  const buttons: Array<{ id: string; element: HTMLButtonElement }> = [];
+  let buttons: Array<{ id: string; element: HTMLButtonElement }> = [];
   const syncTabs = () => {
     for (const button of buttons) button.element.setAttribute('aria-pressed', String(button.id === activeSourceId));
   };
@@ -60,9 +62,10 @@ export function mountSportsHudWithChoices(options: SportsHudOptions) {
     if (destroyed) return;
     controller.switchAwayTo('idle');
     activeSourceId = null;
+    activeSourceUrl = null;
     input.value = '';
     syncTabs();
-    status.textContent = 'Sports feed cleared. No live sports feed URL is attached.';
+    status.textContent = 'unwired_honest: Sports feed cleared. No live sports feed URL is attached.';
   };
   const mountUrl = (rawUrl: string, title?: string, sourceId: string | null = null) => {
     if (destroyed) return;
@@ -72,8 +75,9 @@ export function mountSportsHudWithChoices(options: SportsHudOptions) {
     if (!url) {
       controller.switchAwayTo('idle');
       activeSourceId = null;
+      activeSourceUrl = null;
       syncTabs();
-      status.textContent = 'Enter a valid HTTPS sports URL without embedded credentials.';
+      status.textContent = 'unwired_honest: Enter a valid HTTPS sports URL without embedded credentials.';
       return;
     }
     const kind = sportsUrlKind(url);
@@ -81,27 +85,44 @@ export function mountSportsHudWithChoices(options: SportsHudOptions) {
       ? { streamUrl: url, title: title ?? options.defaultTitle }
       : { embedUrl: url, title: title ?? options.defaultTitle });
     activeSourceId = sourceId;
+    activeSourceUrl = sourceId ? url : null;
     input.value = url;
     syncTabs();
     if (kind === 'stream') {
       const video = options.viewportEl.querySelector('video');
-      if (video) void video.play().catch(() => {});
+      if (video) {
+        video.addEventListener('error', () => {
+          if (options.viewportEl.querySelector('video') === video) status.textContent = 'Video could not play. Check the URL, CORS and browser format support.';
+        });
+        void video.play().catch(() => {});
+      }
     }
     status.textContent = kind === 'stream'
       ? `Direct video URL attached (${title ?? new URL(url).hostname}). Playback depends on browser support.`
       : `Embed URL attached (${title ?? new URL(url).hostname}). The host may block framing.`;
   };
 
-  for (const preset of options.presetSources ?? []) {
-    const button = doc.createElement('button');
-    button.type = 'button';
-    button.textContent = preset.label;
-    button.dataset.sourceId = preset.id;
-    button.addEventListener('click', () => mountUrl(preset.url, preset.label, preset.id));
-    buttons.push({ id: preset.id, element: button });
-    tabs.appendChild(button);
-  }
-  syncTabs();
+  const setPresetSources = (presets: SportsSourceOption[]) => {
+    if (destroyed) return;
+    if (activeSourceId && !presets.some(preset => preset.id === activeSourceId && safeVideoUrl(preset.url.trim()) === activeSourceUrl)) {
+      activeSourceId = null;
+      activeSourceUrl = null;
+    }
+    tabs.replaceChildren();
+    buttons = [];
+    for (const preset of presets) {
+      const button = doc.createElement('button');
+      button.type = 'button';
+      button.textContent = preset.label;
+      button.dataset.sourceId = preset.id;
+      button.addEventListener('click', () => mountUrl(preset.url, preset.label, preset.id));
+      buttons.push({ id: preset.id, element: button });
+      tabs.appendChild(button);
+    }
+    tabs.hidden = buttons.length === 0;
+    syncTabs();
+  };
+  setPresetSources(options.presetSources ?? []);
   load.addEventListener('click', () => mountUrl(input.value));
   clear.addEventListener('click', clearAll);
   input.addEventListener('keydown', event => {
@@ -110,6 +131,7 @@ export function mountSportsHudWithChoices(options: SportsHudOptions) {
   return {
     mountUrl,
     clearAll,
+    setPresetSources,
     destroy() {
       if (destroyed) return;
       controller.switchAwayTo('idle');

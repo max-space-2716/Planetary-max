@@ -13,6 +13,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { verifyNodeSignature } from './middleware';
 import { checkoutMessage } from '../src/shared/checkoutMessage';
 import { ADMIN_SESSION_TTL_MS, sha256Hex } from './admin-session';
+import { handleSportsPresetsRequest } from './sports-presets';
 
 import type { Bindings } from './types';
 
@@ -24,6 +25,7 @@ type AppBindings = Bindings & EcosystemBindings & {
   ADMIN_PASSWORD?: string;
   ADMIN_PASSWORD_HASH?: string;
   ADMIN_SESSIONS: DurableObjectNamespace;
+  KV_BINDING?: KVNamespace;
   JWT_SECRET?: string;
   RESEND_API_KEY?: string;
   PUBLIC_APP_URL?: string;
@@ -124,6 +126,8 @@ app.use('/api/*', async (c, next) => {
 app.use('/api/artworks', (c, next) => c.req.method === 'POST' ? requireAdmin(c, next) : next());
 app.use('/v1/dat/chess', (c, next) => c.req.method === 'POST' ? requireAdmin(c, next) : next());
 app.use('/v1/dat/sports', (c, next) => c.req.method === 'POST' ? requireAdmin(c, next) : next());
+app.use('/api/sports/presets', (c, next) => c.req.method === 'POST' ? requireAdmin(c, next) : next());
+app.all('/api/sports/presets', c => handleSportsPresetsRequest(c.req.raw, c.env, async () => true));
 app.post('/api/beemax/heartbeat', verifyNodeSignature, async (c) => {
   let input;
   try { input = z.object({ mesh_region: z.string().trim().min(1).max(100) }).strict().parse(await readJson(c)); }

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import SportsSuite from './SportsSuite';
+import SportsFeedHub from '../../components/SportsFeedHub';
 interface SportsRecord { event_id: string; league: string; matchup: string; oracle_consensus: { predictedWinner?: string; confidenceScore?: number; dataSourcesCount?: number }; updated_at: string }
-export default function SportsPredictiveView() { return <SportsSuite><MatchupResearch/></SportsSuite>; }
+export default function SportsPredictiveView() { return <><SportsSuite><MatchupResearch/></SportsSuite><SportsFeedHub/></>; }
 function MatchupResearch() {
   const [records, setRecords] = useState<SportsRecord[]>([]);
   const [league, setLeague] = useState('All leagues');
